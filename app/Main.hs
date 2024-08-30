@@ -65,7 +65,7 @@ coverLetter i word = let (b, e) = T.splitAt i word in b <> T.singleton (toUpper 
 mergeHits :: [HitOrMiss] -> [HitOrMiss]
 mergeHits [] = []
 mergeHits [x] = [x]
-mergeHits (x : y : xys) = if x == y then mergeHits (y : xys) else x : y : mergeHits xys
+mergeHits (x : y : xys) = if x == y then mergeHits (y : xys) else x : mergeHits (y : xys)
 
 main :: IO ()
 main = do
