@@ -1,8 +1,10 @@
-module Main where
+{-# LANGUAGE OverloadedStrings #-}
+module Main (main) where
 
 import Control.Monad (when)
 import Data.Char (toUpper)
-import Data.List (sort)
+import Data.List (sort, maximumBy, nub, intersperse)
+import Data.Map qualified as M
 import Data.Text qualified as T
 import Data.Text.IO qualified as T
 import Options.Applicative (
@@ -19,6 +21,8 @@ import Options.Applicative (
   short,
   strOption,
  )
+import qualified Data.Foldable as M
+import Data.Function (on)
 
 data Files = Files
   { la :: !String
@@ -68,12 +72,28 @@ mergeHits [] = []
 mergeHits [x] = [x]
 mergeHits (x : y : xys) = if x == y then mergeHits (y : xys) else x : mergeHits (y : xys)
 
+calculateFrequencies :: [T.Text] -> M.Map Char Double
+calculateFrequencies ts = let m = foldr (flip $ T.foldr $ M.alter $ maybe (pure 1) $ pure . (+1)) M.empty ts
+                              s = M.sum m
+                          in M.map (/s) m
+
+highestProbability :: M.Map Char Double -> [T.Text] -> (T.Text, Double)
+highestProbability m ts = let t = maximumBy (compare `on` probability) ts in (t, probability t)
+  where
+  probability :: T.Text -> Double
+  probability t = if 5 == (length . nub . T.unpack $ t) 
+    then T.foldr (\c a -> a + m M.! c) 0 t
+    else 0
+
 main :: IO ()
 main = do
   args <- execParser opts
   ta_data <- T.readFile $ ta args
   -- la_data <- T.readFile $ la args
   let ta_words = T.words ta_data
+  let m =  calculateFrequencies ta_words
+  let (hp, prb) = highestProbability m ta_words
+  T.putStr hp >> putStr " " >> print prb
   -- let la_words = T.words la_data
   loop ta_words []
  where
@@ -86,11 +106,14 @@ main = do
             Just gh -> do
               let h = mergeHits . sort $ hs <> gh
               let ws = filter (checkHits h) ls
-              print ws
+              let m = calculateFrequencies ws
+              let (hf, pr) = highestProbability m ws
+              mapM_  T.putStr (intersperse ", " ws) >> putStrLn ""
+              T.putStr hf >> putStr " " >> print pr
               when (length ws >= 3) $ loop ls h
             Nothing -> iter "Wrong symbols"
         _ -> iter "Not enough words"
-    where 
+    where
       iter txt = putStrLn txt >> loop ls hs
   opts =
     info
