@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings, ViewPatterns #-}
-
 module Main where
 
 import Data.Char (toUpper)
@@ -44,17 +42,16 @@ files =
 
 data HitOrMiss = Hit Char Int | SemiHit Char Int | Miss Char deriving (Show, Eq, Ord)
 
-generateHits :: T.Text -> T.Text -> [HitOrMiss]
+generateHits :: [(Char, Char)] -> [HitOrMiss]
 generateHits = generateHits' 0
  where
-  generateHits' _ cs hs | all T.null [cs, hs] = []
-  generateHits' n (T.uncons -> Just (c,cs)) (T.uncons -> Just (h, hs)) = case h of
+  generateHits' _ [] = []
+  generateHits' n ((c,h):chs) = case h of
     'G' -> Hit c n : rest
     'Y' -> SemiHit c n : rest
     'g' -> Miss c : rest
     _ -> error "Not suitable for generation"
-    where rest = generateHits' (n + 1) cs hs
-  generateHits' _ _ _ = error "Not suitable for generation"
+    where rest = generateHits' (n + 1) chs
 
 checkHits :: [HitOrMiss] -> T.Text -> Bool
 checkHits [] _ = True
@@ -80,18 +77,22 @@ main = do
   loop ta_words []
  where
   loop ls hs = do
-    [w, p] <- T.words <$> T.getLine
-    let h = mergeHits . sort $ hs <> generateHits w p
-    let ws = filter (checkHits h) ls
-    print ws
-    print h
-    if length ws < 2
-    then return ()
-    else loop ls h
+    wp@[w, p] <- T.words <$> T.getLine
+    if any ((/=5) . T.length) wp
+    then do
+      putStrLn "Wrong word/pattern length"
+      loop ls hs
+    else do
+      let h = mergeHits . sort $ hs <> generateHits (T.zip w p)
+      let ws = filter (checkHits h) ls
+      print ws
+      if length ws < 2
+      then return ()
+      else loop ls h
   opts =
     info
       (helper <*> files)
       ( fullDesc
           <> progDesc "Reads a word and a pattern and prints possible words"
-          <> header "Wordler - Wordle solver"
+          <> header "Wordler - A Wordle solver"
       )
