@@ -1,9 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
+
 module Main (main) where
 
 import Control.Monad (when)
 import Data.Char (toUpper)
-import Data.List (sort, maximumBy, nub, intersperse)
+import Data.Foldable qualified as M
+import Data.Function (on)
+import Data.List (intersperse, maximumBy, nub, sort)
 import Data.Map qualified as M
 import Data.Text qualified as T
 import Data.Text.IO qualified as T
@@ -21,8 +24,6 @@ import Options.Applicative (
   short,
   strOption,
  )
-import qualified Data.Foldable as M
-import Data.Function (on)
 
 data Files = Files
   { la :: !String
@@ -51,12 +52,13 @@ generateHits :: [(Char, Char)] -> Maybe [HitOrMiss]
 generateHits = generateHits' 0
  where
   generateHits' _ [] = Just []
-  generateHits' n ((c,h):chs) = case h of
+  generateHits' n ((c, h) : chs) = case h of
     'G' -> (Hit c n :) <$> rest
     'Y' -> (SemiHit c n :) <$> rest
     'g' -> (Miss c :) <$> rest
     _ -> Nothing
-    where rest = generateHits' (n + 1) chs
+   where
+    rest = generateHits' (n + 1) chs
 
 checkHits :: [HitOrMiss] -> T.Text -> Bool
 checkHits [] _ = True
@@ -73,17 +75,19 @@ mergeHits [x] = [x]
 mergeHits (x : y : xys) = if x == y then mergeHits (y : xys) else x : mergeHits (y : xys)
 
 calculateFrequencies :: [T.Text] -> M.Map Char Double
-calculateFrequencies ts = let m = foldr (flip $ T.foldr $ M.alter $ maybe (pure 1) $ pure . (+1)) M.empty ts
-                              s = M.sum m
-                          in M.map (/s) m
+calculateFrequencies ts =
+  let m = foldr (flip $ T.foldr $ M.alter $ maybe (pure 1) $ pure . (+ 1)) M.empty ts
+      s = M.sum m
+   in M.map (/ s) m
 
 highestProbability :: M.Map Char Double -> [T.Text] -> (T.Text, Double)
 highestProbability m ts = let t = maximumBy (compare `on` probability) ts in (t, probability t)
-  where
+ where
   probability :: T.Text -> Double
-  probability t = if 5 == (length . nub . T.unpack $ t) 
-    then T.foldr (\c a -> a + m M.! c) 0 t
-    else 0
+  probability t =
+    if 5 == (length . nub . T.unpack $ t)
+      then T.foldr (\c a -> a + m M.! c) 0 t
+      else 0
 
 main :: IO ()
 main = do
@@ -91,7 +95,7 @@ main = do
   ta_data <- T.readFile $ ta args
   -- la_data <- T.readFile $ la args
   let ta_words = T.words ta_data
-  let m =  calculateFrequencies ta_words
+  let m = calculateFrequencies ta_words
   let (hp, prb) = highestProbability m ta_words
   T.putStr hp >> putStr " " >> print prb
   -- let la_words = T.words la_data
@@ -99,22 +103,22 @@ main = do
  where
   loop ls hs = do
     wp <- T.words <$> T.getLine
-    if any ((/=5) . T.length) wp
-    then iter "Wrong word/pattern length"
-    else case wp of
+    if any ((/= 5) . T.length) wp
+      then iter "Wrong word/pattern length"
+      else case wp of
         [w, p] -> case generateHits (T.zip w p) of
-            Just gh -> do
-              let h = mergeHits . sort $ hs <> gh
-              let ws = filter (checkHits h) ls
-              let m = calculateFrequencies ws
-              let (hf, pr) = highestProbability m ws
-              mapM_  T.putStr (intersperse ", " ws) >> putStrLn ""
-              T.putStr hf >> putStr " " >> print pr
-              when (length ws >= 3) $ loop ls h
-            Nothing -> iter "Wrong symbols"
+          Just gh -> do
+            let h = mergeHits . sort $ hs <> gh
+            let ws = filter (checkHits h) ls
+            let m = calculateFrequencies ws
+            let (hf, pr) = highestProbability m ws
+            mapM_ T.putStr (intersperse ", " ws) >> putStrLn ""
+            T.putStr hf >> putStr " " >> print pr
+            when (length ws >= 3) $ loop ls h
+          Nothing -> iter "Wrong symbols"
         _ -> iter "Not enough words"
-    where
-      iter txt = putStrLn txt >> loop ls hs
+   where
+    iter txt = putStrLn txt >> loop ls hs
   opts =
     info
       (helper <*> files)
