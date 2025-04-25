@@ -1,5 +1,6 @@
 module Main where
 
+import Control.Monad (when)
 import Data.Char (toUpper)
 import Data.List (sort)
 import Data.Text qualified as T
@@ -42,15 +43,15 @@ files =
 
 data HitOrMiss = Hit Char Int | SemiHit Char Int | Miss Char deriving (Show, Eq, Ord)
 
-generateHits :: [(Char, Char)] -> [HitOrMiss]
+generateHits :: [(Char, Char)] -> Maybe [HitOrMiss]
 generateHits = generateHits' 0
  where
-  generateHits' _ [] = []
+  generateHits' _ [] = Just []
   generateHits' n ((c,h):chs) = case h of
-    'G' -> Hit c n : rest
-    'Y' -> SemiHit c n : rest
-    'g' -> Miss c : rest
-    _ -> error "Not suitable for generation"
+    'G' -> (Hit c n :) <$> rest
+    'Y' -> (SemiHit c n :) <$> rest
+    'g' -> (Miss c :) <$> rest
+    _ -> Nothing
     where rest = generateHits' (n + 1) chs
 
 checkHits :: [HitOrMiss] -> T.Text -> Bool
@@ -79,20 +80,18 @@ main = do
   loop ls hs = do
     wp <- T.words <$> T.getLine
     if any ((/=5) . T.length) wp
-    then do
-      putStrLn "Wrong word/pattern length"
-      loop ls hs
+    then iter "Wrong word/pattern length"
     else case wp of
-        [w, p] -> do
-          let h = mergeHits . sort $ hs <> generateHits (T.zip w p)
-          let ws = filter (checkHits h) ls
-          print ws
-          if length ws < 3
-          then return ()
-          else loop ls h
-        _ -> do
-          putStrLn "Not enough words"
-          loop ls hs
+        [w, p] -> case generateHits (T.zip w p) of
+            Just gh -> do
+              let h = mergeHits . sort $ hs <> gh
+              let ws = filter (checkHits h) ls
+              print ws
+              when (length ws >= 3) $ loop ls h
+            Nothing -> iter "Wrong symbols"
+        _ -> iter "Not enough words"
+    where 
+      iter txt = putStrLn txt >> loop ls hs
   opts =
     info
       (helper <*> files)
