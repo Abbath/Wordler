@@ -87,7 +87,7 @@ main = do
           let h = mergeHits . sort $ hs <> generateHits (T.zip w p)
           let ws = filter (checkHits h) ls
           print ws
-          if length ws < 2
+          if length ws < 3
           then return ()
           else loop ls h
         _ -> do
