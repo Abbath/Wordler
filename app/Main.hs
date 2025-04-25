@@ -77,18 +77,22 @@ main = do
   loop ta_words []
  where
   loop ls hs = do
-    wp@[w, p] <- T.words <$> T.getLine
+    wp <- T.words <$> T.getLine
     if any ((/=5) . T.length) wp
     then do
       putStrLn "Wrong word/pattern length"
       loop ls hs
-    else do
-      let h = mergeHits . sort $ hs <> generateHits (T.zip w p)
-      let ws = filter (checkHits h) ls
-      print ws
-      if length ws < 2
-      then return ()
-      else loop ls h
+    else case wp of
+        [w, p] -> do
+          let h = mergeHits . sort $ hs <> generateHits (T.zip w p)
+          let ws = filter (checkHits h) ls
+          print ws
+          if length ws < 2
+          then return ()
+          else loop ls h
+        _ -> do
+          putStrLn "Not enough words"
+          loop ls hs
   opts =
     info
       (helper <*> files)
