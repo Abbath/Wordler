@@ -6,7 +6,7 @@ import Control.Monad (when)
 import Data.Char (toUpper)
 import Data.Foldable qualified as M
 import Data.Function (on)
-import Data.List (intersperse, sort, sortBy)
+import Data.List (foldl', intersperse, sort, sortBy)
 import Data.Map qualified as M
 import Data.Maybe (fromMaybe, isJust)
 import Data.Set qualified as S
@@ -98,15 +98,18 @@ highestProbability mx ts = sortBy (compare `on` probability) ts
       else 0
 
 hitAndMiss :: [HitOrMiss] -> [Char]
-hitAndMiss [] = []
-hitAndMiss hs@(Hit x _ : rest) | Miss x `elem` hs = x : hitAndMiss rest
-hitAndMiss (Hit _ _ : rest) = hitAndMiss rest
-hitAndMiss (_ : _) = []
+hitAndMiss hs = foldl' (\a -> maybe a (: a) . ch) [] $ takeWhile isHit hs
+ where
+  isHit (Hit _ _) = True
+  isHit _ = False
+  ch (Hit x _) | Miss x `elem` hs = Just x
+  ch _ = Nothing
 
 pruneHits :: [Char] -> [HitOrMiss] -> [HitOrMiss]
-pruneHits _ [] = []
-pruneHits cs (SemiHit c _ : rest) | c `elem` cs = pruneHits cs rest
-pruneHits cs (h : rest) = h : pruneHits cs rest
+pruneHits cs = filter ch
+ where
+  ch (SemiHit c _) | c `elem` cs = False
+  ch _ = True
 
 main :: IO ()
 main = do
