@@ -1,4 +1,4 @@
-cabal-version:      3.4
+cabal-version:      3.12
 -- The cabal-version field refers to the version of the .cabal specification,
 -- and can be different from the cabal-install (the tool) version and the
 -- Cabal (the library) version you are using. As such, the Cabal (the library)
@@ -20,7 +20,7 @@ name:               Wordler
 -- PVP summary:     +-+------- breaking API changes
 --                  | | +----- non-breaking API additions
 --                  | | | +--- code changes with no API change
-version:            0.1.0.0
+version:            0.2.0.0
 
 -- A short (one-line) description of the package.
 -- synopsis:
@@ -35,7 +35,7 @@ license:            MIT
 license-file:       LICENSE
 
 -- The package author(s).
-author:             Abbath]
+author:             Abbath
 
 -- An email address to which users can send suggestions, bug reports, and patches.
 maintainer:         pitongogi@gmail.com
@@ -67,7 +67,7 @@ executable Wordler
     -- other-extensions:
 
     -- Other library packages from which modules are imported.
-    build-depends:    base ^>=4.18.2.1
+    build-depends:    base ^>=4.18.3
                     , text
                     , optparse-applicative
                     , containers
