@@ -53,7 +53,7 @@ files =
 data HitOrMiss = Hit Char Int | SemiHit Char Int | Miss Char deriving (Show, Eq, Ord)
 
 generateHits :: [(Char, Char)] -> Maybe [HitOrMiss]
-generateHits = generateHits' 0
+generateHits = (sort <$>) . generateHits' 0
  where
   generateHits' _ [] = Just []
   generateHits' n ((c, h) : chs) = case h of
@@ -69,8 +69,9 @@ checkHits _ [] _ = True
 checkHits cnt (Hit c i : xs) w = T.index w i == c && checkHits (M.alter (maybe (pure 1) $ pure . (+ 1)) c cnt) xs (coverLetter i w)
 checkHits cnt (SemiHit c i : xs) w = any (`T.elem` w) [c, toUpper c] && T.index w i /= c && checkHits (M.alter (maybe (pure 1) pure) c cnt) xs w
 checkHits cnt (Miss c : xs) w =
-  let num = fromMaybe 0 $ M.lookup c cnt
-   in T.count (T.singleton c) w <= num && checkHits cnt xs w
+  let num1 = fromMaybe 0 $ M.lookup c cnt
+      num2 = T.count (T.singleton c) w + T.count (T.singleton . toUpper $ c) w
+   in num2 <= num1 && checkHits cnt xs w
 
 coverLetter :: Int -> T.Text -> T.Text
 coverLetter i word = let (b, e) = T.splitAt i word in b <> T.singleton (toUpper . T.head $ e) <> T.tail e
@@ -95,6 +96,17 @@ highestProbability mx ts = sortBy (compare `on` probability) ts
       then -T.foldr (\c a -> a + m M.! c) 0 t
       else 0
 
+hitAndMiss :: [HitOrMiss] -> [Char]
+hitAndMiss [] = []
+hitAndMiss hs@(Hit x _ : rest) | Miss x `elem` hs = x : hitAndMiss rest
+hitAndMiss (Hit _ _ : rest) = hitAndMiss rest
+hitAndMiss (_ : _) = []
+
+pruneHits :: [Char] -> [HitOrMiss] -> [HitOrMiss]
+pruneHits _ [] = []
+pruneHits cs (SemiHit c _ : rest) | c `elem` cs = pruneHits cs rest
+pruneHits cs (h : rest) = h : pruneHits cs rest
+
 main :: IO ()
 main = do
   args <- execParser opts
@@ -118,8 +130,8 @@ main = do
                   [p] -> generateHits (T.zip mw p)
                   _ -> Nothing
             case hits of
-              Just gh -> do
-                let h = mergeHits . sort $ hs <> gh
+              Just new_hits -> do
+                let h = mergeHits . sort $ pruneHits (hitAndMiss new_hits) hs <> new_hits
                 let ws = highestProbability 4 . filter (checkHits M.empty h) $ ls
                 mapM_ T.putStr (intersperse ", " ws) >> putStrLn ""
                 when (length ws >= 3) $ loop ws h (head ws)
