@@ -93,7 +93,7 @@ highestProbability mx ts = sortBy (compare `on` probability) ts
   m = calculateFrequencies ts
   probability t =
     if mx <= (length . nub . T.unpack $ t)
-      then -T.foldr (\c a -> a + m M.! c) 0 t
+      then -T.foldr ((+) . (m M.!)) 0 t
       else 0
 
 hitAndMiss :: [HitOrMiss] -> [Char]
