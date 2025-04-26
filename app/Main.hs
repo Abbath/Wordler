@@ -68,7 +68,7 @@ checkHits cnt (Hit c i : xs) w = T.index w i == c && checkHits (M.alter (pure . 
 checkHits cnt (SemiHit c i : xs) w = any (`T.elem` w) [c, toUpper c] && T.index w i /= c && checkHits (M.alter (pure . fromMaybe 1) c cnt) xs w
 checkHits cnt (Miss c : xs) w =
   let num1 = fromMaybe 0 $ M.lookup c cnt
-      num2 = T.count (T.singleton c) w + T.count (T.singleton . toUpper $ c) w
+      num2 = sum . map (flip T.count w . T.singleton) $ [c, toUpper c]
    in num2 <= num1 && checkHits cnt xs w
 
 coverLetter :: Int -> T.Text -> T.Text
@@ -124,20 +124,20 @@ main = do
     if any ((/= 5) . T.length) wp
       then iter "Wrong word/pattern length"
       else
-        if not (null wp)
-          then do
+        if null wp
+          then iter "Not enough words"
+          else do
             let hits = case wp of
                   [w, p] -> generateHits (T.zip w p)
                   [p] -> generateHits (T.zip mw p)
                   _ -> Nothing
             case hits of
+              Nothing -> iter "Wrong symbols or too many words"
               Just new_hits -> do
                 let h = mergeHits . sort $ pruneHits (hitAndMiss new_hits) hs <> new_hits
                 let ws = highestProbability 4 . filter (checkHits mempty h) $ ls
                 mapM_ T.putStr (intersperse ", " ws) >> putStrLn ""
-                when (length ws >= 3) $ loop ws h (head ws)
-              Nothing -> iter "Wrong symbols or too many words"
-          else iter "Not enough words"
+                when (length ws > 2) $ loop ws h (head ws)
    where
     iter txt = putStrLn txt >> loop ls hs mw
   opts =
