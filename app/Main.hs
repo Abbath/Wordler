@@ -6,9 +6,10 @@ import Control.Monad (when)
 import Data.Char (toUpper)
 import Data.Foldable qualified as M
 import Data.Function (on)
-import Data.List (intersperse, nub, sort, sortBy)
+import Data.List (intersperse, sort, sortBy)
 import Data.Map qualified as M
 import Data.Maybe (fromMaybe, isJust)
+import Data.Set qualified as S
 import Data.Text qualified as T
 import Data.Text.IO qualified as T
 import Options.Applicative (
@@ -83,7 +84,7 @@ mergeHits (x : y : xys) = if x == y then mergeHits (y : xys) else x : mergeHits 
 
 calculateFrequencies :: [T.Text] -> M.Map Char Double
 calculateFrequencies ts =
-  let m = foldr (flip $ T.foldr $ M.alter $ maybe (pure 1) $ pure . (+ 1)) M.empty ts
+  let m = foldr (flip $ T.foldr $ M.alter $ maybe (pure 1) $ pure . (+ 1)) mempty ts
       s = M.sum m
    in M.map (/ s) m
 
@@ -92,7 +93,7 @@ highestProbability mx ts = sortBy (compare `on` probability) ts
  where
   m = calculateFrequencies ts
   probability t =
-    if mx <= (length . nub . T.unpack $ t)
+    if mx <= length (T.foldr S.insert mempty t)
       then -T.foldr ((+) . (m M.!)) 0 t
       else 0
 
@@ -132,7 +133,7 @@ main = do
             case hits of
               Just new_hits -> do
                 let h = mergeHits . sort $ pruneHits (hitAndMiss new_hits) hs <> new_hits
-                let ws = highestProbability 4 . filter (checkHits M.empty h) $ ls
+                let ws = highestProbability 4 . filter (checkHits mempty h) $ ls
                 mapM_ T.putStr (intersperse ", " ws) >> putStrLn ""
                 when (length ws >= 3) $ loop ws h (head ws)
               Nothing -> iter "Wrong symbols or too many words"
