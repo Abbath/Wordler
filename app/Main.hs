@@ -8,6 +8,7 @@ import Data.Foldable qualified as M
 import Data.Function (on)
 import Data.List (intersperse, nub, sort, sortBy)
 import Data.Map qualified as M
+import Data.Maybe (fromMaybe, isJust)
 import Data.Text qualified as T
 import Data.Text.IO qualified as T
 import Options.Applicative (
@@ -20,14 +21,15 @@ import Options.Applicative (
   info,
   long,
   metavar,
+  optional,
   progDesc,
   short,
   strOption,
  )
 
 data Files = Files
-  { la :: !String
-  , ta :: !String
+  { ta :: !String
+  , la :: Maybe String
   }
 
 files :: Parser Files
@@ -39,11 +41,13 @@ files =
           <> metavar "Ta"
           <> help "List of possible solutions"
       )
-    <*> strOption
-      ( long "la"
-          <> short 'l'
-          <> metavar "La"
-          <> help "List of allowed words"
+    <*> optional
+      ( strOption
+          ( long "la"
+              <> short 'l'
+              <> metavar "La"
+              <> help "List of allowed words"
+          )
       )
 
 data HitOrMiss = Hit Char Int | SemiHit Char Int | Miss Char deriving (Show, Eq, Ord)
@@ -60,11 +64,13 @@ generateHits = generateHits' 0
    where
     rest = generateHits' (n + 1) chs
 
-checkHits :: [HitOrMiss] -> T.Text -> Bool
-checkHits [] _ = True
-checkHits (Hit c i : xs) w = T.index w i == c && checkHits xs (coverLetter i w)
-checkHits (SemiHit c i : xs) w = any (`T.elem` w) [c, toUpper c] && T.index w i /= c && checkHits xs w
-checkHits (Miss c : xs) w = not (T.elem c w) && checkHits xs w
+checkHits :: M.Map Char Int -> [HitOrMiss] -> T.Text -> Bool
+checkHits _ [] _ = True
+checkHits cnt (Hit c i : xs) w = T.index w i == c && checkHits (M.alter (maybe (pure 1) $ pure . (+ 1)) c cnt) xs (coverLetter i w)
+checkHits cnt (SemiHit c i : xs) w = any (`T.elem` w) [c, toUpper c] && T.index w i /= c && checkHits (M.alter (maybe (pure 1) pure) c cnt) xs w
+checkHits cnt (Miss c : xs) w =
+  let num = fromMaybe 0 $ M.lookup c cnt
+   in T.count (T.singleton c) w <= num && checkHits cnt xs w
 
 coverLetter :: Int -> T.Text -> T.Text
 coverLetter i word = let (b, e) = T.splitAt i word in b <> T.singleton (toUpper . T.head $ e) <> T.tail e
@@ -80,12 +86,12 @@ calculateFrequencies ts =
       s = M.sum m
    in M.map (/ s) m
 
-highestProbability :: M.Map Char Double -> [T.Text] -> [T.Text]
-highestProbability m = sortBy (compare `on` probability)
+highestProbability :: Int -> [T.Text] -> [T.Text]
+highestProbability mx ts = sortBy (compare `on` probability) ts
  where
-  probability :: T.Text -> Double
+  m = calculateFrequencies ts
   probability t =
-    if 5 == (length . nub . T.unpack $ t)
+    if mx <= (length . nub . T.unpack $ t)
       then -T.foldr (\c a -> a + m M.! c) 0 t
       else 0
 
@@ -93,31 +99,34 @@ main :: IO ()
 main = do
   args <- execParser opts
   ta_data <- T.readFile $ ta args
-  -- la_data <- T.readFile $ la args
+  when (isJust $ la args) $ putStrLn "La is not used"
   let ta_words = T.words ta_data
-  let m = calculateFrequencies ta_words
-  let hp = highestProbability m ta_words
-  T.putStrLn (head hp)
-  -- let la_words = T.words la_data
-  loop ta_words []
+  let hp = highestProbability 5 ta_words
+  let magic_word = head hp
+  T.putStrLn magic_word
+  loop ta_words [] magic_word
  where
-  loop ls hs = do
+  loop ls hs mw = do
     wp <- T.words <$> T.getLine
     if any ((/= 5) . T.length) wp
       then iter "Wrong word/pattern length"
-      else case wp of
-        [w, p] -> case generateHits (T.zip w p) of
-          Just gh -> do
-            let h = mergeHits . sort $ hs <> gh
-            let ws = filter (checkHits h) ls
-            let m = calculateFrequencies ws
-            let hf = highestProbability m ws
-            mapM_ T.putStr (intersperse ", " hf) >> putStrLn ""
-            when (length ws >= 3) $ loop ls h
-          Nothing -> iter "Wrong symbols"
-        _ -> iter "Not enough words"
+      else
+        if not (null wp)
+          then do
+            let hits = case wp of
+                  [w, p] -> generateHits (T.zip w p)
+                  [p] -> generateHits (T.zip mw p)
+                  _ -> Nothing
+            case hits of
+              Just gh -> do
+                let h = mergeHits . sort $ hs <> gh
+                let ws = highestProbability 4 . filter (checkHits M.empty h) $ ls
+                mapM_ T.putStr (intersperse ", " ws) >> putStrLn ""
+                when (length ws >= 3) $ loop ws h (head ws)
+              Nothing -> iter "Wrong symbols or too many words"
+          else iter "Not enough words"
    where
-    iter txt = putStrLn txt >> loop ls hs
+    iter txt = putStrLn txt >> loop ls hs mw
   opts =
     info
       (helper <*> files)
