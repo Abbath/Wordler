@@ -6,7 +6,7 @@ import Control.Monad (when)
 import Data.Char (toUpper)
 import Data.Foldable qualified as M
 import Data.Function (on)
-import Data.List (foldl', intersperse, sort, sortBy)
+import Data.List (foldl', group, intersperse, sort, sortBy)
 import Data.Map qualified as M
 import Data.Maybe (fromMaybe, isJust)
 import Data.Set qualified as S
@@ -54,16 +54,13 @@ files =
 data HitOrMiss = Hit Char Int | SemiHit Char Int | Miss Char deriving (Show, Eq, Ord)
 
 generateHits :: [(Char, Char)] -> Maybe [HitOrMiss]
-generateHits = (sort <$>) . generateHits' 0
+generateHits = (sort . zipWith (\n f -> f n) [0 ..] <$>) . traverse generateHit
  where
-  generateHits' _ [] = Just []
-  generateHits' n ((c, h) : chs) = case h of
-    'G' -> (Hit c n :) <$> rest
-    'Y' -> (SemiHit c n :) <$> rest
-    'g' -> (Miss c :) <$> rest
+  generateHit (c, h) = case h of
+    'G' -> Just (Hit c)
+    'Y' -> Just (SemiHit c)
+    'g' -> Just (const (Miss c))
     _ -> Nothing
-   where
-    rest = generateHits' (n + 1) chs
 
 checkHits :: M.Map Char Int -> [HitOrMiss] -> T.Text -> Bool
 checkHits _ [] _ = True
@@ -78,9 +75,7 @@ coverLetter :: Int -> T.Text -> T.Text
 coverLetter i word = let (b, e) = T.splitAt i word in b <> T.singleton (toUpper . T.head $ e) <> T.tail e
 
 mergeHits :: [HitOrMiss] -> [HitOrMiss]
-mergeHits [] = []
-mergeHits [x] = [x]
-mergeHits (x : y : xys) = if x == y then mergeHits (y : xys) else x : mergeHits (y : xys)
+mergeHits = map head . group
 
 calculateFrequencies :: [T.Text] -> M.Map Char Double
 calculateFrequencies ts =
