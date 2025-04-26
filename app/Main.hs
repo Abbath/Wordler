@@ -6,7 +6,7 @@ import Control.Monad (when)
 import Data.Char (toUpper)
 import Data.Foldable qualified as M
 import Data.Function (on)
-import Data.List (intersperse, maximumBy, nub, sort)
+import Data.List (intersperse, nub, sort, sortBy)
 import Data.Map qualified as M
 import Data.Text qualified as T
 import Data.Text.IO qualified as T
@@ -80,13 +80,13 @@ calculateFrequencies ts =
       s = M.sum m
    in M.map (/ s) m
 
-highestProbability :: M.Map Char Double -> [T.Text] -> (T.Text, Double)
-highestProbability m ts = let t = maximumBy (compare `on` probability) ts in (t, probability t)
+highestProbability :: M.Map Char Double -> [T.Text] -> [T.Text]
+highestProbability m = sortBy (compare `on` probability)
  where
   probability :: T.Text -> Double
   probability t =
     if 5 == (length . nub . T.unpack $ t)
-      then T.foldr (\c a -> a + m M.! c) 0 t
+      then -T.foldr (\c a -> a + m M.! c) 0 t
       else 0
 
 main :: IO ()
@@ -96,8 +96,8 @@ main = do
   -- la_data <- T.readFile $ la args
   let ta_words = T.words ta_data
   let m = calculateFrequencies ta_words
-  let (hp, prb) = highestProbability m ta_words
-  T.putStr hp >> putStr " " >> print prb
+  let hp = highestProbability m ta_words
+  T.putStrLn (head hp)
   -- let la_words = T.words la_data
   loop ta_words []
  where
@@ -111,9 +111,8 @@ main = do
             let h = mergeHits . sort $ hs <> gh
             let ws = filter (checkHits h) ls
             let m = calculateFrequencies ws
-            let (hf, pr) = highestProbability m ws
-            mapM_ T.putStr (intersperse ", " ws) >> putStrLn ""
-            T.putStr hf >> putStr " " >> print pr
+            let hf = highestProbability m ws
+            mapM_ T.putStr (intersperse ", " hf) >> putStrLn ""
             when (length ws >= 3) $ loop ls h
           Nothing -> iter "Wrong symbols"
         _ -> iter "Not enough words"
