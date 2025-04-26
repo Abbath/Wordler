@@ -54,18 +54,18 @@ files =
 data HitOrMiss = Hit Char Int | SemiHit Char Int | Miss Char deriving (Show, Eq, Ord)
 
 generateHits :: [(Char, Char)] -> Maybe [HitOrMiss]
-generateHits = (sort . zipWith (\n f -> f n) [0 ..] <$>) . traverse generateHit
+generateHits = (sort . zipWith (flip ($)) [0 ..] <$>) . traverse generateHit
  where
   generateHit (c, h) = case h of
-    'G' -> Just (Hit c)
-    'Y' -> Just (SemiHit c)
-    'g' -> Just (const (Miss c))
+    'G' -> Just $ Hit c
+    'Y' -> Just $ SemiHit c
+    'g' -> Just . const $ Miss c
     _ -> Nothing
 
 checkHits :: M.Map Char Int -> [HitOrMiss] -> T.Text -> Bool
 checkHits _ [] _ = True
-checkHits cnt (Hit c i : xs) w = T.index w i == c && checkHits (M.alter (maybe (pure 1) $ pure . (+ 1)) c cnt) xs (coverLetter i w)
-checkHits cnt (SemiHit c i : xs) w = any (`T.elem` w) [c, toUpper c] && T.index w i /= c && checkHits (M.alter (maybe (pure 1) pure) c cnt) xs w
+checkHits cnt (Hit c i : xs) w = T.index w i == c && checkHits (M.alter (pure . maybe 1 (+ 1)) c cnt) xs (coverLetter i w)
+checkHits cnt (SemiHit c i : xs) w = any (`T.elem` w) [c, toUpper c] && T.index w i /= c && checkHits (M.alter (pure . fromMaybe 1) c cnt) xs w
 checkHits cnt (Miss c : xs) w =
   let num1 = fromMaybe 0 $ M.lookup c cnt
       num2 = T.count (T.singleton c) w + T.count (T.singleton . toUpper $ c) w
@@ -79,7 +79,7 @@ mergeHits = map head . group
 
 calculateFrequencies :: [T.Text] -> M.Map Char Double
 calculateFrequencies ts =
-  let m = foldr (flip $ T.foldr $ M.alter $ maybe (pure 1) $ pure . (+ 1)) mempty ts
+  let m = foldr (flip $ T.foldr $ M.alter $ pure . maybe 1 (+ 1)) mempty ts
       s = M.sum m
    in M.map (/ s) m
 
@@ -93,10 +93,8 @@ highestProbability mx ts = sortBy (compare `on` probability) ts
       else 0
 
 hitAndMiss :: [HitOrMiss] -> [Char]
-hitAndMiss hs = foldl' (\a -> maybe a (: a) . ch) [] $ takeWhile isHit hs
+hitAndMiss hs = foldl' (\a -> maybe a (: a) . ch) [] $ [h | h@Hit{} <- hs]
  where
-  isHit (Hit _ _) = True
-  isHit _ = False
   ch (Hit x _) | Miss x `elem` hs = Just x
   ch _ = Nothing
 
