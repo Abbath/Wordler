@@ -8,7 +8,7 @@ import Data.Foldable qualified as M
 import Data.Function (on)
 import Data.List (foldl', group, intersperse, sort, sortBy)
 import Data.Map qualified as M
-import Data.Maybe (fromMaybe, isJust)
+import Data.Maybe (fromJust, fromMaybe, isJust)
 import Data.Set qualified as S
 import Data.Text qualified as T
 import Data.Text.IO qualified as T
@@ -37,16 +37,16 @@ files :: Parser Files
 files =
   Files
     <$> strOption
-      ( long "ta"
-          <> short 't'
-          <> metavar "Ta"
+      ( long "possible"
+          <> short 'p'
+          <> metavar "POSSIBLE"
           <> help "List of possible solutions"
       )
     <*> optional
       ( strOption
-          ( long "la"
-              <> short 'l'
-              <> metavar "La"
+          ( long "allowed"
+              <> short 'a'
+              <> metavar "ALLOWED"
               <> help "List of allowed words"
           )
       )
@@ -108,12 +108,16 @@ main :: IO ()
 main = do
   args <- execParser opts
   ta_data <- T.readFile $ ta args
-  when (isJust $ la args) $ putStrLn "La is not used"
   let ta_words = T.words ta_data
-  let hp = highestProbability 5 ta_words
+  la_words <-
+    if isJust $ la args
+      then T.words <$> T.readFile (fromJust (la args))
+      else pure []
+  let all_words = S.toList . foldr S.insert mempty $ ta_words <> la_words
+  let hp = highestProbability 5 all_words
   let magic_word = head hp
   T.putStrLn magic_word
-  loop ta_words [] magic_word
+  loop all_words [] magic_word
  where
   loop ls hs mw = do
     wp <- T.words <$> T.getLine
