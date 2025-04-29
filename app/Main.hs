@@ -64,12 +64,13 @@ generateHits = (sort . zipWith (flip ($)) [0 ..] <$>) . traverse generateHit
 
 checkHits :: M.Map Char Int -> [HitOrMiss] -> T.Text -> Bool
 checkHits _ [] _ = True
-checkHits cnt (Hit c i : xs) w = T.index w i == c && checkHits (M.alter (pure . maybe 1 (+ 1)) c cnt) xs (coverLetter i w)
-checkHits cnt (SemiHit c i : xs) w = any (`T.elem` w) [c, toUpper c] && T.index w i /= c && checkHits (M.alter (pure . fromMaybe 1) c cnt) xs w
-checkHits cnt (Miss c : xs) w =
-  let num1 = fromMaybe 0 $ M.lookup c cnt
-      num2 = sum . map (flip T.count w . T.singleton) $ [c, toUpper c]
-   in num2 <= num1 && checkHits cnt xs w
+checkHits cnt hits w = case hits of
+  (Hit c i : xs) -> T.index w i == c && checkHits (M.alter (pure . maybe 1 (+ 1)) c cnt) xs (coverLetter i w)
+  (SemiHit c i : xs) -> any (`T.elem` w) [c, toUpper c] && T.index w i /= c && checkHits (M.alter (pure . fromMaybe 1) c cnt) xs w
+  (Miss c : xs) ->
+    let num1 = fromMaybe 0 $ M.lookup c cnt
+        num2 = sum . map (flip T.count w . T.singleton) $ [c, toUpper c]
+     in num2 <= num1 && checkHits cnt xs w
 
 coverLetter :: Int -> T.Text -> T.Text
 coverLetter i word = let (b, e) = T.splitAt i word in b <> T.singleton (toUpper . T.head $ e) <> T.tail e
