@@ -5,10 +5,10 @@ module Main (main) where
 import Control.Monad (when)
 import Data.Char (toUpper)
 import Data.Foldable qualified as M
-import Data.Function (on)
+import Data.Function (on, (&))
 import Data.List (foldl', group, intersperse, sort, sortBy)
 import Data.Map qualified as M
-import Data.Maybe (fromJust, fromMaybe, isJust)
+import Data.Maybe (fromMaybe)
 import Data.Set qualified as S
 import Data.Text qualified as T
 import Data.Text.IO qualified as T
@@ -29,8 +29,8 @@ import Options.Applicative (
  )
 
 data Files = Files
-  { ta :: !String
-  , la :: Maybe String
+  { possible :: !String
+  , allowed :: Maybe String
   }
 
 files :: Parser Files
@@ -54,7 +54,7 @@ files =
 data HitOrMiss = Hit Char Int | SemiHit Char Int | Miss Char deriving (Show, Eq, Ord)
 
 generateHits :: [(Char, Char)] -> Maybe [HitOrMiss]
-generateHits = (sort . zipWith (flip ($)) [0 ..] <$>) . traverse generateHit
+generateHits = fmap (sort . zipWith (&) [0 ..]) . traverse generateHit
  where
   generateHit (c, h) = case h of
     'G' -> Just $ Hit c
@@ -108,13 +108,9 @@ pruneHits cs = filter ch
 main :: IO ()
 main = do
   args <- execParser opts
-  ta_data <- T.readFile $ ta args
-  let ta_words = T.words ta_data
-  la_words <-
-    if isJust $ la args
-      then T.words <$> T.readFile (fromJust (la args))
-      else pure []
-  let all_words = S.toList . foldr S.insert mempty $ ta_words <> la_words
+  possible_words <- T.words <$> T.readFile (possible args)
+  allowed_words <- maybe (pure []) (fmap T.words . T.readFile) (allowed args)
+  let all_words = S.toList . foldr S.insert mempty $ possible_words <> allowed_words
   let hp = highestProbability 5 all_words
   let magic_word = head hp
   T.putStrLn magic_word
