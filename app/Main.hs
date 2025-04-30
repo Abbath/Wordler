@@ -88,10 +88,12 @@ highestProbability :: Int -> [T.Text] -> [T.Text]
 highestProbability mx ts = sortBy (compare `on` probability) ts
  where
   m = calculateFrequencies ts
-  probability t =
-    if mx <= length (T.foldr S.insert mempty t)
-      then -T.foldr ((+) . (m M.!)) 0 t
-      else 0
+  probability t = 
+    let prob = -T.foldr ((+) . (m M.!)) 0 t
+        len =  length (T.foldr S.insert mempty t)
+    in if mx <= len
+      then prob
+      else prob * (fromIntegral len / 5)
 
 hitAndMiss :: [HitOrMiss] -> [Char]
 hitAndMiss hs = foldl' (\a -> maybe a (: a) . ch) [] $ [h | h@Hit{} <- hs]
@@ -132,7 +134,7 @@ main = do
               Nothing -> iter "Wrong symbols or too many words"
               Just new_hits -> do
                 let h = mergeHits . sort $ pruneHits (hitAndMiss new_hits) hs <> new_hits
-                let ws = highestProbability 4 . filter (checkHits mempty h) $ ls
+                let ws = highestProbability 5 . filter (checkHits mempty h) $ ls
                 mapM_ T.putStr (intersperse ", " ws) >> putStrLn ""
                 when (length ws > 2) $ loop ws h (head ws)
    where
