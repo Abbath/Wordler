@@ -63,8 +63,8 @@ generateHits = fmap (sort . zipWith (&) [0 ..]) . traverse generateHit
     _ -> Nothing
 
 checkHits :: M.Map Char Int -> [HitOrMiss] -> T.Text -> Bool
-checkHits _ [] _ = True
 checkHits cnt hits w = case hits of
+  [] -> True
   (Hit c i : xs) -> T.index w i == c && checkHits (M.alter (pure . maybe 1 (+ 1)) c cnt) xs (coverLetter i w)
   (SemiHit c i : xs) -> any (`T.elem` w) [c, toUpper c] && T.index w i /= c && checkHits (M.alter (pure . fromMaybe 1) c cnt) xs w
   (Miss c : xs) ->
@@ -88,12 +88,12 @@ highestProbability :: Int -> [T.Text] -> [T.Text]
 highestProbability mx ts = sortBy (compare `on` probability) ts
  where
   m = calculateFrequencies ts
-  probability t = 
+  probability t =
     let prob = -T.foldr ((+) . (m M.!)) 0 t
-        len =  length (T.foldr S.insert mempty t)
-    in if mx <= len
-      then prob
-      else prob * (fromIntegral len / 5)
+        len = length (T.foldr S.insert mempty t)
+     in if mx <= len
+          then prob
+          else prob * (fromIntegral len / 5)
 
 hitAndMiss :: [HitOrMiss] -> [Char]
 hitAndMiss hs = foldl' (\a -> maybe a (: a) . ch) [] $ [h | h@Hit{} <- hs]
