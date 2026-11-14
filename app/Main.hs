@@ -3,8 +3,7 @@
 module Main (main) where
 
 import Control.Monad (when)
-import Data.Char (toUpper)
-import Data.Foldable qualified as M
+import Data.Char (toLower, toUpper)
 import Data.Function (on, (&))
 import Data.List (group, intersperse, sort, sortBy)
 import Data.Map qualified as M
@@ -47,7 +46,7 @@ files =
           ( long "allowed"
               <> short 'a'
               <> metavar "ALLOWED"
-              <> help "List of allowed words"
+              <> help "List of allowed guesses (used for opening suggestion only)"
           )
       )
 
@@ -62,18 +61,32 @@ generateHits = fmap (sort . zipWith (&) [0 ..]) . traverse generateHit
     'g' -> Just . const $ Miss c
     _ -> Nothing
 
+incCount :: Char -> M.Map Char Int -> M.Map Char Int
+incCount c = M.alter (pure . maybe 1 (+ 1)) c
+
+coverLetter :: Int -> T.Text -> T.Text
+coverLetter i word =
+  let (b, e) = T.splitAt i word
+   in b <> T.singleton (toUpper . T.head $ e) <> T.tail e
+
+findUncovered :: Char -> T.Text -> Maybe Int
+findUncovered c w =
+  listToMaybe [i | (i, x) <- zip [0 ..] (T.unpack w), x == c]
+
 checkHits :: M.Map Char Int -> [HitOrMiss] -> T.Text -> Bool
 checkHits cnt hits w = case hits of
   [] -> True
-  (Hit c i : xs) -> T.index w i == c && checkHits (M.alter (pure . maybe 1 (+ 1)) c cnt) xs (coverLetter i w)
-  (SemiHit c i : xs) -> any (`T.elem` w) [c, toUpper c] && T.index w i /= c && checkHits (M.alter (pure . fromMaybe 1) c cnt) xs w
+  (Hit c i : xs) ->
+    T.index w i == c && checkHits (incCount c cnt) xs (coverLetter i w)
+  (SemiHit c i : xs) ->
+    toLower (T.index w i) /= c
+      && case findUncovered c w of
+        Nothing -> False
+        Just j -> checkHits (incCount c cnt) xs (coverLetter j w)
   (Miss c : xs) ->
     let num1 = fromMaybe 0 $ M.lookup c cnt
         num2 = sum . map (flip T.count w . T.singleton) $ [c, toUpper c]
      in num2 <= num1 && checkHits cnt xs w
-
-coverLetter :: Int -> T.Text -> T.Text
-coverLetter i word = let (b, e) = T.splitAt i word in b <> T.singleton (toUpper . T.head $ e) <> T.tail e
 
 mergeHits :: [HitOrMiss] -> [HitOrMiss]
 mergeHits hs = [x | Just x <- map listToMaybe $ group hs]
@@ -81,7 +94,7 @@ mergeHits hs = [x | Just x <- map listToMaybe $ group hs]
 calculateFrequencies :: [T.Text] -> M.Map Char Double
 calculateFrequencies ts =
   let m = foldr (flip $ T.foldr $ M.alter $ pure . maybe 1 (+ 1)) mempty ts
-      s = M.sum m
+      s = sum (M.elems m)
    in M.map (/ s) m
 
 highestProbability :: Int -> [T.Text] -> [T.Text]
@@ -96,7 +109,7 @@ highestProbability mx ts = sortBy (compare `on` probability) ts
           else prob * (fromIntegral len / 5)
 
 hitAndMiss :: [HitOrMiss] -> [Char]
-hitAndMiss hs = foldl' (\a -> maybe a (: a) . ch) [] $ [h | h@Hit{} <- hs]
+hitAndMiss hs = foldl' (\a -> maybe a (: a) . ch) [] [h | h@Hit{} <- hs]
  where
   ch (Hit x _) | Miss x `elem` hs = Just x
   ch _ = Nothing
@@ -110,17 +123,19 @@ pruneHits cs = filter ch
 main :: IO ()
 main = do
   args <- execParser opts
-  possible_words <- T.words <$> T.readFile (possible args)
-  allowed_words <- maybe (pure []) (fmap T.words . T.readFile) (allowed args)
-  let all_words = S.toList . foldr S.insert mempty $ possible_words <> allowed_words
-  if null all_words
-    then putStrLn "No words"
-    else do
-      let hp = highestProbability 5 all_words
-      let magic_word = hp !! 0
-      T.putStrLn magic_word
-      loop all_words [] magic_word
+  possible_words <- dedupe . T.words <$> T.readFile (possible args)
+  allowed_words <- maybe (pure []) (fmap (dedupe . T.words) . T.readFile) (allowed args)
+  case possible_words of
+    [] -> putStrLn "No words"
+    _ -> do
+      let openers = highestProbability 5 (dedupe $ possible_words <> allowed_words)
+      case openers of
+        [] -> putStrLn "No words"
+        (magic_word : _) -> do
+          T.putStrLn magic_word
+          loop possible_words [] magic_word
  where
+  dedupe = S.toList . S.fromList
   loop ls hs mw = do
     wp <- T.words <$> T.getLine
     if any ((/= 5) . T.length) wp
@@ -137,15 +152,20 @@ main = do
               Nothing -> iter "Wrong symbols or too many words"
               Just new_hits -> do
                 let h = mergeHits . sort $ pruneHits (hitAndMiss new_hits) hs <> new_hits
-                let ws = highestProbability 5 . filter (checkHits mempty h) $ ls
-                mapM_ T.putStr (intersperse ", " ws) >> putStrLn ""
-                when (length ws > 2) $ loop ws h (ws !! 0)
+                    ws = highestProbability 5 . filter (checkHits mempty h) $ ls
+                case ws of
+                  [] -> putStrLn "No matches"
+                  (best : rest) -> do
+                    mapM_ T.putStr (intersperse ", " ws) >> putStrLn ""
+                    when (not $ null rest) $ loop ws h best
    where
     iter txt = putStrLn txt >> loop ls hs mw
   opts =
     info
       (helper <*> files)
       ( fullDesc
-          <> progDesc "Reads a word and a pattern and prints possible words"
+          <> progDesc
+            "Reads a guess and a pattern (G=green, Y=yellow, g=gray) \
+            \and prints remaining possible solutions"
           <> header "Wordler - A Wordle solver"
       )
