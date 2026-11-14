@@ -6,9 +6,9 @@ import Control.Monad (when)
 import Data.Char (toUpper)
 import Data.Foldable qualified as M
 import Data.Function (on, (&))
-import Data.List (foldl', group, intersperse, sort, sortBy)
+import Data.List (group, intersperse, sort, sortBy)
 import Data.Map qualified as M
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, listToMaybe)
 import Data.Set qualified as S
 import Data.Text qualified as T
 import Data.Text.IO qualified as T
@@ -76,7 +76,7 @@ coverLetter :: Int -> T.Text -> T.Text
 coverLetter i word = let (b, e) = T.splitAt i word in b <> T.singleton (toUpper . T.head $ e) <> T.tail e
 
 mergeHits :: [HitOrMiss] -> [HitOrMiss]
-mergeHits = map head . group
+mergeHits hs = [x | Just x <- map listToMaybe $ group hs]
 
 calculateFrequencies :: [T.Text] -> M.Map Char Double
 calculateFrequencies ts =
@@ -113,10 +113,13 @@ main = do
   possible_words <- T.words <$> T.readFile (possible args)
   allowed_words <- maybe (pure []) (fmap T.words . T.readFile) (allowed args)
   let all_words = S.toList . foldr S.insert mempty $ possible_words <> allowed_words
-  let hp = highestProbability 5 all_words
-  let magic_word = head hp
-  T.putStrLn magic_word
-  loop all_words [] magic_word
+  if null all_words
+    then putStrLn "No words"
+    else do
+      let hp = highestProbability 5 all_words
+      let magic_word = hp !! 0
+      T.putStrLn magic_word
+      loop all_words [] magic_word
  where
   loop ls hs mw = do
     wp <- T.words <$> T.getLine
@@ -136,7 +139,7 @@ main = do
                 let h = mergeHits . sort $ pruneHits (hitAndMiss new_hits) hs <> new_hits
                 let ws = highestProbability 5 . filter (checkHits mempty h) $ ls
                 mapM_ T.putStr (intersperse ", " ws) >> putStrLn ""
-                when (length ws > 2) $ loop ws h (head ws)
+                when (length ws > 2) $ loop ws h (ws !! 0)
    where
     iter txt = putStrLn txt >> loop ls hs mw
   opts =
