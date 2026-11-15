@@ -46,7 +46,9 @@ files =
           ( long "allowed"
               <> short 'a'
               <> metavar "ALLOWED"
-              <> help "List of allowed guesses (used for opening suggestion only)"
+              <> help
+                "List of allowed guesses (opening suggestions; also used if no \
+                \--possible solutions remain)"
           )
       )
 
@@ -91,6 +93,9 @@ checkHits cnt hits w = case hits of
 mergeHits :: [HitOrMiss] -> [HitOrMiss]
 mergeHits hs = [x | Just x <- map listToMaybe $ group hs]
 
+matchesAll :: [[HitOrMiss]] -> T.Text -> Bool
+matchesAll guesses w = all (\hits -> checkHits mempty hits w) guesses
+
 calculateFrequencies :: [T.Text] -> M.Map Char Double
 calculateFrequencies ts =
   let m = foldr (flip $ T.foldr $ M.alter $ pure . maybe 1 (+ 1)) mempty ts
@@ -108,18 +113,6 @@ highestProbability mx ts = sortBy (compare `on` probability) ts
           then prob
           else prob * (fromIntegral len / 5)
 
-hitAndMiss :: [HitOrMiss] -> [Char]
-hitAndMiss hs = foldl' (\a -> maybe a (: a) . ch) [] [h | h@Hit{} <- hs]
- where
-  ch (Hit x _) | Miss x `elem` hs = Just x
-  ch _ = Nothing
-
-pruneHits :: [Char] -> [HitOrMiss] -> [HitOrMiss]
-pruneHits cs = filter ch
- where
-  ch (SemiHit c _) | c `elem` cs = False
-  ch _ = True
-
 main :: IO ()
 main = do
   args <- execParser opts
@@ -133,10 +126,10 @@ main = do
         [] -> putStrLn "No words"
         (magic_word : _) -> do
           T.putStrLn magic_word
-          loop possible_words [] magic_word
+          loop possible_words allowed_words [] magic_word
  where
   dedupe = S.toList . S.fromList
-  loop ls hs mw = do
+  loop possibles alloweds guesses mw = do
     wp <- T.words <$> T.getLine
     if any ((/= 5) . T.length) wp
       then iter "Wrong word/pattern length"
@@ -151,15 +144,20 @@ main = do
             case hits of
               Nothing -> iter "Wrong symbols or too many words"
               Just new_hits -> do
-                let h = mergeHits . sort $ pruneHits (hitAndMiss new_hits) hs <> new_hits
-                    ws = highestProbability 5 . filter (checkHits mempty h) $ ls
+                let guesses' = mergeHits new_hits : guesses
+                    ps = filter (matchesAll guesses') possibles
+                    as = filter (matchesAll guesses') alloweds
+                    (ws, possibles', alloweds') = case ps of
+                      [] -> (highestProbability 5 as, [], as)
+                      _ -> (highestProbability 5 ps, ps, as)
                 case ws of
                   [] -> putStrLn "No matches"
                   (best : rest) -> do
                     mapM_ T.putStr (intersperse ", " ws) >> putStrLn ""
-                    when (not $ null rest) $ loop ws h best
+                    when (not $ null rest) $
+                      loop possibles' alloweds' guesses' best
    where
-    iter txt = putStrLn txt >> loop ls hs mw
+    iter txt = putStrLn txt >> loop possibles alloweds guesses mw
   opts =
     info
       (helper <*> files)
